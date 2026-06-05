@@ -23,11 +23,12 @@ class Register:
 
 # Константы для режимов адресации
 class AddrMode:
-    REG = 0           # Регистровый
-    IMMEDIATE = 1     # Непосредственный
-    ABSOLUTE = 2      # Абсолютный
-    BASE_OFFSET = 3   # Базовый со смещением
-    POST_INC = 4      # Постинкрементный
+    REG = 0           # Регистровый (000)            Rn
+    IMMEDIATE = 1     # Непосредственный (001)        #imm
+    ABSOLUTE = 2      # Абсолютный (010)              [imm]
+    BASE_OFFSET = 3   # Базовый со смещением (011)    [Rn + imm]
+    POST_INC = 4      # Постинкрементный (100)        [Rn]+
+    REG_INDIRECT = 5  # Регистровый косвенный (101)   [Rn]
 
 # Константы форматов инструкций
 class InstrFormat:
@@ -39,7 +40,6 @@ class InstrFormat:
 
 # Коды операций (Опкоды)
 class Opcode:
-    INVOKE = 0x10
     PUSHM = 0x11
     POPM = 0x12
     
@@ -72,7 +72,6 @@ class Opcode:
 
 # Словарь для быстрого определения формата инструкции по опкоду
 OPCODE_FORMAT = {
-    Opcode.INVOKE: InstrFormat.C1,
     Opcode.PUSHM: InstrFormat.C1,
     Opcode.POPM: InstrFormat.C1,
     Opcode.MOV: InstrFormat.C2,
@@ -120,7 +119,7 @@ class Instruction:
         self.ext_values = []  # Список числовых значений операндов (доп. слова)
         self.offset = 0       # Смещение для переходов (ветвления)
         self.regs = []        # Список регистров (для формата C1)
-        self.func_addr = 0    # Адрес функции (для INVOKE)
+        self.func_addr = 0    # Зарезервировано (адрес функции; вызовы идут через CALL)
         self.address = 0      # Логический адрес инструкции
 
 
@@ -307,10 +306,6 @@ def encode_instruction(instr):
                     offset = offset + 1
                     remaining = remaining - 1
                 words.append(extra_word)
-                
-        # Специфика INVOKE - требуется указать адрес функции
-        if instr.opcode == Opcode.INVOKE:
-            words.append(instr.func_addr & 0xFFFFFFFF)
 
     return words
 
@@ -449,13 +444,6 @@ def from_bytes(data):
                     reg_val = (extra_word >> shift) & 0xF
                     instr.regs.append(reg_val)
                     remaining = remaining - 1
-                    
-            # Для INVOKE читаем еще одно слово (адрес вызова)
-            if opcode == Opcode.INVOKE:
-                ext_pos = pos + (words_consumed * 4)
-                if ext_pos + 4 <= len(data):
-                    instr.func_addr = read_word(data, ext_pos)
-                    words_consumed = words_consumed + 1
 
         # Сдвигаемся к следующей инструкции
         pos = pos + (words_consumed * 4)

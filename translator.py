@@ -149,7 +149,12 @@ class Translator:
             self.lbl(f"__f_{n}")
             self.emit(Opcode.PUSHM, regs=[R.FP])
             self.emit(Opcode.MOV, [reg(R.FP), reg(R.SP)])
-            self.ce_list(info["body"], {arg: base_off(R.FP, 2 + i) for i, arg in enumerate(info["args"])})
+            # Кадр: [saved FP, return PC, argN, ..., arg1]. Аргументы кладутся на стек
+            # слева направо, поэтому первый аргумент оказывается по наибольшему смещению,
+            # а последний — по [FP+2]. Доступ: arg_i -> [FP + 2 + (nargs-1-i)].
+            nargs = len(info["args"])
+            self.ce_list(info["body"], {arg: base_off(R.FP, 2 + (nargs - 1 - i))
+                                        for i, arg in enumerate(info["args"])})
             self.emit(Opcode.MOV, [reg(R.SP), reg(R.FP)])
             self.emit(Opcode.POPM, regs=[R.FP])
             self.emit(Opcode.RET)
@@ -271,15 +276,14 @@ class Translator:
                 self.emit(Opcode.POPM, regs=[R.R0])
                 self.emit(Opcode.OUT, [reg(R.R0), reg(R.R1)])
             elif h in ("defvar", "defun", "definterrupt"): self.emit(Opcode.MOV, [reg(R.R0), imm(0)])
-            else: # Вызов пользовательской функции
+            else: # Вызов пользовательской функции (README: передача аргументов
+                  # через стек + CALL, без отдельной инструкции вызова).
+                # Аргументы вычисляются слева направо и кладутся на стек.
                 for a in args:
                     self.ce(a, lm); self.emit(Opcode.PUSHM, regs=[R.R0])
-                aregs = [R.R1 + i for i in range(len(args))]
-                for r in reversed(aregs): self.emit(Opcode.POPM, regs=[r])
-                if not args: self.emit(Opcode.CALL, tgt=f"__f_{h}")
-                else:
-                    self.emit(Opcode.INVOKE, regs=aregs, func=f"__f_{h}")
-                    self.emit(Opcode.ADD, [reg(R.SP), imm(len(args))])
+                self.emit(Opcode.CALL, tgt=f"__f_{h}")
+                # Снятие аргументов со стека после возврата (результат уже в R0).
+                if args: self.emit(Opcode.ADD, [reg(R.SP), imm(len(args))])
 
     def e_kind(self, e, ug=True):
         """Статический вывод типа выражения."""
