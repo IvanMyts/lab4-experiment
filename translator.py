@@ -125,7 +125,9 @@ class Translator:
             for idx, c in enumerate(v):
                 self.emit(Opcode.MOV, [abs_addr(a + idx + 1), imm(ord(c))])
 
-        # Резерв прерываний
+        # Резерв прерываний: адрес обработчика пишется прямо в ячейку IVT.
+        # `MOV [abs_imm32], #imm32` — валидная инструкция с двумя словами расширения
+        # (адрес приёмника в EXT1, значение в EXT2); железо это поддерживает.
         for v, info in self.ints.items():
             self.emit(Opcode.MOV, [abs_addr(v), imm(0, False)])
             info["patch"] = self.items[-1]
